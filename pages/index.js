@@ -2,8 +2,6 @@ import { createRef, useReducer, useRef, useState } from "react";
 import Edge from "../components/edge";
 import Node from "../components/node";
 
-/** Idea: remove all states tracking center, just change stuff while things are */
-
 /** Action must have a few params
  *    type: type of action
  *    ind: node id number
@@ -16,14 +14,23 @@ const nodeReducer = (state, action) => {
         id: action.ind,
         ref: action.ref,
         edges: [],
+        isBlack: true,
       });
       return updated;
     case "addEdge":
-      console.log("added edge");
       var updated = state.map((a) => {
         let returnVal = { ...a };
         if (a.id === action.ind) {
           returnVal.edges.push(action.e_id);
+        }
+        return returnVal;
+      });
+      return updated;
+    case "changeColor":
+      var updated = state.map((a) => {
+        let returnVal = { ...a };
+        if (a.id === action.ind) {
+          returnVal.isBlack = !returnVal.isBlack;
         }
         return returnVal;
       });
@@ -75,6 +82,7 @@ export default function Home() {
       id: 0,
       edges: [],
       ref: {},
+      isBlack: true,
     },*/
   ]);
   const [edges, edgeChangeDispatch] = useReducer(edgeReducer, [
@@ -101,18 +109,27 @@ export default function Home() {
   };
 
   const handleNodeClick = (e, id) => {
-    if (mouseState !== "E") {
-      draggable(e, id);
-      return;
+    switch (mouseState) {
+      case "S":
+        draggable(e, id);
+        return;
+      case "E":
+        if (selected == "") {
+          setSelected(id);
+          return;
+        }
+        edgeLinking(id);
+        return;
+      case "C":
+        nodeChangeDispatch({
+          type: "changeColor",
+          ind: parseInt(id.match(/\d+$/)[0]),
+        });
+        return;
     }
-    if (selected == "") {
-      setSelected(id);
-      return;
-    }
-    edgeLinking(e, id);
   };
 
-  const edgeLinking = (e, id) => {
+  const edgeLinking = (id) => {
     const endNodeNum = parseInt(id.match(/\d+$/)[0]);
     const startNodeNum = parseInt(selected.match(/\d+$/)[0]);
 
@@ -234,6 +251,15 @@ export default function Home() {
         >
           Select
         </button>
+        <button
+          className="p-5 bg-white w-full"
+          onClick={() => {
+            setMouseState("C");
+            setSelected("");
+          }}
+        >
+          Color
+        </button>
         <button className="p-5 bg-white w-full" onClick={() => enlargeCanvas()}>
           Canvas
         </button>
@@ -262,7 +288,7 @@ export default function Home() {
             id={`node${a.id}`}
             key={`node${a.id}`}
             setRef={a.ref}
-            color="bg-black"
+            color={a.isBlack}
             onMouseDown={(e) => {
               handleNodeClick(e, `node${a.id}`);
             }}
