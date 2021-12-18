@@ -1,10 +1,20 @@
-const Node = ({ id, z, black, color, size, setRef, ...props }) => {
+const Node = ({
+  id,
+  z,
+  black,
+  color,
+  size,
+  setRef,
+  root,
+  children,
+  ...props
+}) => {
   return (
     <div
       key={id}
       id={id}
       draggable="true"
-      className="absolute z-10 rounded-full overflow-visible"
+      className="absolute z-10 rounded-full overflow-visible flex items-center justify-center"
       ref={setRef}
       {...props}
       onDragStart={() => false}
@@ -12,13 +22,14 @@ const Node = ({ id, z, black, color, size, setRef, ...props }) => {
       <svg width={`${size}px`} height={`${size}px`} overflow="visible">
         <circle
           fill="black"
-          stroke={`${color ? "black" : "#df3820"}`}
+          stroke={`${color ? (root ? "gray" : "black") : "#df3820"}`}
           strokeWidth={`${size / 10}px`}
           cx={`${size / 2}px`}
           cy={`${size / 2}px`}
           r={`${size / 2}px`}
         />
       </svg>
+      {children}
     </div>
   );
 };
