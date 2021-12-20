@@ -2,6 +2,8 @@ import { createRef, useEffect, useReducer, useRef, useState } from "react";
 import Edge from "../components/edge";
 import Node from "../components/node";
 
+/* TODO: When a node has a self edge, if we move that node, self edge does not update accordingly, why? */
+
 /** Action must have a few params
  *    type: type of action
  *    ind: node id number
@@ -20,25 +22,24 @@ const nodeReducer = (state, action) => {
       });
       return updated;
     case "addEdge":
-      var updated = state.map((a) => {
-        let returnVal = { ...a };
-        if (a.id === action.ind) {
-          returnVal.edges.push(action.e_id);
-        }
-        return returnVal;
-      });
+      var updated = [...state];
+      updated[action.ind].edges.push(action.e_id);
+      return updated;
+    case "removeEdge":
+      /* Action must have
+       * id: node position in array nodes object
+       * e_id: edge position in node[id].edges array
+       * */
+      var updated = [...state];
+      updated[action.ind].edges.splice(action.e_id, 1);
       return updated;
     case "changeColor":
-      var updated = state.map((a) => {
-        let returnVal = { ...a };
-        if (a.id === action.ind) {
-          returnVal.isBlack = !returnVal.isBlack;
-        }
-        return returnVal;
-      });
+      var updated = [...state];
+      updated[action.ind].isBlack = !updated[action.ind].isBlack;
       return updated;
     case "remove":
       var updated = state.map((a) => {
+        if (!a) return a;
         let returnVal = { ...a };
         if (a.id === action.ind) {
           returnVal = null;
@@ -49,29 +50,16 @@ const nodeReducer = (state, action) => {
   }
 };
 
-const treeReducer = (state, action) => {
-  switch (action.type) {
-    case "add":
-      var updated = [...state];
-      updated.push({
-        label: action.label,
-        left: action.leftLabel,
-        right: action.rightLabel,
-        parent: action.parentLabel,
-        isBlack: action.isBlack,
-      });
-      return updated;
-    case "reset":
-      return [];
-  }
-};
-
 const edgeReducer = (state, action) => {
   switch (action.type) {
     case "remove":
-      var updated = state.filter((e) => {
-        if (e.id !== action.ind) return e;
-        return null;
+      var updated = state.map((a) => {
+        if (!a) return a;
+        let returnVal = { ...a };
+        if (a.id === action.ind) {
+          returnVal = null;
+        }
+        return returnVal;
       });
       return updated;
     case "add":
@@ -102,6 +90,7 @@ export default function Home() {
   /**
    * P = Pan
    * S = Select (and for Dragging)
+   * E = edge
    */
   const [mouseState, setMouseState] = useState("E");
   const [currInd, setCurrInd] = useState(0);
@@ -109,7 +98,24 @@ export default function Home() {
   const [selected, setSelected] = useState("");
   const [rootId, setRootId] = useState(0);
   const [verifyMessage, setVerifyMessage] = useState("");
-  const [verifyState, setVerifyState] = useState({
+
+  let tree = [
+    /*
+    {
+      label: "",
+      parent: num,
+      parentId: num,
+      left: num,
+      leftId: num,
+      right: num,
+      rightId: num,
+      id: num,
+      isBlack: bool,
+    }
+     */
+  ];
+
+  let verifyState = {
     numVisited: 0,
     redHasRedChildren: false,
     blackHeightGood: true,
@@ -117,7 +123,8 @@ export default function Home() {
     hasCycle: false,
     badOrder: false,
     sameLabel: false,
-  });
+  };
+
   const [nodeSize, setNodeSize] = useState(50);
 
   const [label, labelChangeDispatch] = useReducer(labelReducer, [
@@ -134,17 +141,7 @@ export default function Home() {
      * labels should not force a re-render.
      */
   ]);
-  const [tree, treeChangeDispatch] = useReducer(treeReducer, [
-    /*
-    {
-      label: "",
-      parent: num,
-      left: num,
-      right: num,
-      isBlack: bool,
-    }
-     */
-  ]);
+
   const [nodes, nodeChangeDispatch] = useReducer(nodeReducer, [
     /*{
       id: 0,
@@ -177,6 +174,8 @@ export default function Home() {
   };
 
   const handleNodeClick = (e, id) => {
+    const nodeIdNum = parseInt(id.match(/\d+$/)[0]);
+
     switch (mouseState) {
       case "S":
         draggable(e, id);
@@ -191,8 +190,14 @@ export default function Home() {
       case "C":
         nodeChangeDispatch({
           type: "changeColor",
-          ind: parseInt(id.match(/\d+$/)[0]),
+          ind: nodeIdNum,
         });
+        return;
+      case "D":
+        deleteNode(nodeIdNum);
+        return;
+      case "R":
+        setRootId(nodeIdNum);
         return;
     }
   };
@@ -235,13 +240,24 @@ export default function Home() {
       document.getElementById(`edge${a}`)
     );
 
-    /** Array containing whether or not this node is the start or end of the edge, where
+    /** Array containing details of the edges, an entry has
+     *    -1: If this node is the start of the edge
+     *     0: If this edge is a self edge
+     *     1: If this node is the end of the edge
+     *
+     * Array containing whether or not this node is the start or end of the edge, where
      * the index of entry in this array corresponds to the edge at the same index of the
      * edgeRefs array
      */
-    const isStart = nodes[nodeIdNum].edges.map(
-      (a) => edges[a].start === nodeIdNum
-    );
+    const isStart = nodes[nodeIdNum].edges.map((a) => {
+      if (edges[a].start === nodeIdNum) {
+        if (edges[a].end === nodeIdNum) {
+          return 0;
+        }
+        return -1;
+      }
+      return 1;
+    });
 
     let left = boundingRect.left;
     let top = boundingRect.top;
@@ -259,16 +275,17 @@ export default function Home() {
     function moveAt(pageX, pageY) {
       let i = 0;
       for (let i = 0; i < edgeRefs.length; i++) {
-        const isStartPoint = isStart[i];
+        const edgeCase = isStart[i];
         const ref = edgeRefs[i];
-        if (isStartPoint) {
+        if (edgeCase === -1 || edgeCase === 0) {
           ref.attributes.x1.nodeValue = pageX - offsetX + width / 2 + "px";
           ref.attributes.x1.value = pageX - offsetX + width / 2 + "px";
           ref.attributes.x1.textContent = pageX - offsetX + width / 2 + "px";
           ref.attributes.y1.nodeValue = pageY - offsetY + height / 2 + "px";
           ref.attributes.y1.value = pageY - offsetY + height / 2 + "px";
           ref.attributes.y1.textContent = pageY - offsetY + height / 2 + "px";
-        } else {
+        }
+        if (edgeCase === 1 || edgeCase === 0) {
           ref.attributes.x2.nodeValue = pageX - offsetX + width / 2 + "px";
           ref.attributes.x2.value = pageX - offsetX + width / 2 + "px";
           ref.attributes.x2.textContent = pageX - offsetX + width / 2 + "px";
@@ -296,6 +313,89 @@ export default function Home() {
     document.addEventListener("mousemove", onMouseMove);
   };
 
+  const addToTree = (action) => {
+    tree.push({
+      label: action.label,
+      left: action.leftLabel,
+      right: action.rightLabel,
+      parent: action.parentLabel,
+      isBlack: action.isBlack,
+    });
+  };
+
+  /**
+   * @param id, the index of the node within the nodes array to be deleted
+   *
+   * This function is called when we delete a node.
+   *    1. The function gets the node and iterates through its edges.
+   *    2. When it finds an edge which leads to another node and isn't in foundNeighbors
+   *      1. It adds the neighboring node to the foundNeighbors list.
+   *      2. It goes through every edge of the neighboring node
+   *      3. It removes every edge of the neighbor that has an endpoint at the current node
+   *        (Note, these edges must be both removed from the nodes object and edges object)
+   *        (With the nodes object, we can simply remove the edge from the list of edges)
+   *        (With the edges object, we turn that edge into null, as if we simply removed
+   *          it, we would ruin our system of edge IDs which correspond to the edges array
+   *          indices, we must preserve these indices, so we do not want to resize the arr)
+   *    3. Continues iterating until all edges have been searched
+   *    4. Deletes the current node (by turning the object into null, preserving the size
+   *        of this array so as not to ruin our IDing Node system by array index)
+   */
+  const deleteNode = (id) => {
+    const removeEdge = (edgesArrId, nodeEdgesArrId, neighborNodeId) => {
+      nodeChangeDispatch({
+        type: "removeEdge",
+        ind: neighborNodeId,
+        e_id: nodeEdgesArrId,
+      });
+      edgeChangeDispatch({
+        type: "remove",
+        ind: edgesArrId,
+      });
+    };
+
+    const currNode = nodes[id];
+
+    const foundNeighbors = [];
+    for (let i = 0; i < currNode.edges.length; i++) {
+      const edge = edges[currNode.edges[i]];
+
+      /* Ignore self edge */
+      if (edge.start === edge.end) {
+        edgeChangeDispatch({
+          type: "remove",
+          ind: edge.id,
+        });
+        continue;
+      }
+
+      /* Get the position of the neighbor node within the nodes array */
+      const endPoint = edge.start === id ? edge.end : edge.start;
+      const neighborNode = nodes[endPoint];
+
+      if (foundNeighbors.find((e) => e === endPoint)) {
+        continue;
+      }
+      foundNeighbors.push(endPoint);
+
+      for (let j = 0; j < neighborNode.edges.length; j++) {
+        const neighborEdge = edges[neighborNode.edges[j]];
+        const neighborEndPoint =
+          neighborEdge.start === neighborNode.id
+            ? neighborEdge.end
+            : neighborEdge.start;
+
+        if (neighborEndPoint !== id) continue;
+
+        removeEdge(neighborEdge.id, j, neighborNode.id);
+      }
+    }
+    nodeChangeDispatch({
+      type: "remove",
+      ind: id,
+    });
+  };
+
   /** We expect labels to be integers (so we can parseInt) */
   const recursivelyCheckAndBuildTree = (currNode, parentNode) => {
     const currLabel = parseInt(label[currNode.id]);
@@ -321,8 +421,6 @@ export default function Home() {
 
     /* Identify & store non-parent and non-self edges from the current node */
     let childEdges = [];
-    console.log(currNode.edges);
-    console.log(edges);
     for (let i = 0; i < currNode.edges.length; i++) {
       const edge = edges[currNode.edges[i]];
 
@@ -343,7 +441,8 @@ export default function Home() {
 
       /* Ignore extra copies of an edge if multiple edges between a node and another node exists */
       let currEdgeInChildrenAlready = false;
-      for (const childEdge in childEdges) {
+      for (let i = 0; i < childEdges.length; i++) {
+        const childEdge = childEdges[i];
         if (
           (edge.start === childEdge.start || edge.end === childEdge.start) &&
           (edge.start === childEdge.end || edge.end === childEdge.end)
@@ -361,10 +460,10 @@ export default function Home() {
 
     /* Invalid tree structure case (more than 2 children edges) */
     if (childEdges.length > 2) {
-      setVerifyState({
+      verifyState = {
         ...verifyState,
         exceedsMaxEdgeCount: true,
-      });
+      };
       return;
     }
 
@@ -386,10 +485,10 @@ export default function Home() {
 
       /* Have a node with identical value as a neighbor, two nodes with same val */
       if (endLabel === startLabel) {
-        setVerifyState({
+        verifyState = {
           ...verifyState,
           sameLabel: true,
-        });
+        };
         return;
       }
 
@@ -402,20 +501,20 @@ export default function Home() {
        * meaning a node has two children with labels that can not form a valid tree */
       if (toAdd < currLabel) {
         if (leftChild) {
-          setVerifyState({
+          verifyState = {
             ...verifyState,
             badOrder: true,
-          });
+          };
           return;
         }
         leftNodeId = toAddId;
         leftChild = toAdd;
       } else {
         if (rightChild) {
-          setVerifyState({
+          verifyState = {
             ...verifyState,
             badOrder: true,
-          });
+          };
           return;
         }
         rightNodeId = toAddId;
@@ -426,22 +525,21 @@ export default function Home() {
     /* If our tree already has a node of the same label in it, then either we have reached this same
      * node via cycle, or this is a new node with a label that exists on another node in the tree */
     if (tree.find((e) => e.label === currLabel)) {
-      setVerifyState({
+      verifyState = {
         ...verifyState,
         sameLabel: true,
         hasCycle: true,
-      });
+      };
       return;
     }
 
-    setVerifyState({
+    verifyState = {
       ...verifyState,
       numVisited: verifyState.numVisited + 1,
-    });
+    };
 
     /* Construct our tree */
-    treeChangeDispatch({
-      type: "add",
+    addToTree({
       label: currLabel,
       leftLabel: leftChild,
       rightLabel: rightChild,
@@ -450,15 +548,116 @@ export default function Home() {
     });
 
     if (leftChild) {
-      recursivelyCheckAndBuildTree(nodes[leftNodeId]);
+      recursivelyCheckAndBuildTree(nodes[leftNodeId], currNode);
     }
     if (rightChild) {
-      recursivelyCheckAndBuildTree(nodes[rightNodeId]);
+      recursivelyCheckAndBuildTree(nodes[rightNodeId], currNode);
+    }
+  };
+
+  /* Returns [id of node with given label, node] */
+  const getTreeNode = (label) => {
+    if (!label) {
+      return [-1, undefined];
+    }
+    for (let i = 0; i < tree.length; i++) {
+      if (tree[i].label === label) {
+        return [i, tree[i]];
+      }
+    }
+    return [-1, undefined];
+  };
+
+  const checkIsTreeBSTAndRed = (node, min, max) => {
+    /* First, get left, right, parent nodes, connect them by id within tree */
+
+    if (
+      verifyState.redHasRedChildren ||
+      !verifyState.blackHeightGood ||
+      verifyState.hasCycle ||
+      verifyState.badOrder ||
+      verifyState.sameLabel
+    ) {
+      return false;
+    }
+
+    /* Stop recursion if a node is undefined */
+    if (!node) {
+      return true;
+    }
+
+    const currId = getTreeNode(node.label)[0];
+    const [leftId, leftNode] = getTreeNode(node.left);
+    const [rightId, rightNode] = getTreeNode(node.right);
+    const [parentId, parentNode] = getTreeNode(node.parent);
+
+    /* These IDs are sort of pointers within our tree to the surrounding nodes */
+    tree[currId] = {
+      ...tree[currId],
+      leftId: leftId,
+      rightId: rightId,
+      parentId: parentId,
+      id: currId,
+    };
+
+    /* Checks if tree has BST ordering */
+    if (node.label > max || node.label < min) {
+      verifyState = {
+        ...verifyState,
+        badOrder: true,
+      };
+      return false;
+    }
+
+    /* Checks if we have currnode is red with childnode is red, not allowed */
+    if (!node.isBlack) {
+      if (
+        (leftNode && !leftNode.isBlack) ||
+        (rightNode && !rightNode.isBlack)
+      ) {
+        verifyState = {
+          ...verifyState,
+          redHasRedChildren: true,
+        };
+        return false;
+      }
+    }
+
+    if (
+      checkIsTreeBSTAndRed(leftNode, min, node.label - 1) &&
+      checkIsTreeBSTAndRed(rightNode, node.label + 1, max)
+    ) {
+      return true;
+    }
+  };
+
+  /* Credit to this stackoverflow answer for this simple black height algorithm
+   *
+   * https://stackoverflow.com/questions/27731072/check-whether-a-tree-satisfies-the-black-height-property-of-red-black-tree
+   *
+   * This simply checks if the black height property is satisfied on a tree */
+  const checkTreeBlackHeight = (node) => {
+    if (!node) {
+      return 0;
+    }
+    let leftHeight = checkTreeBlackHeight(tree[node.leftId]);
+    let rightHeight = checkTreeBlackHeight(tree[node.rightId]);
+    let addCurrNode = node.isBlack ? 1 : 0;
+
+    if (leftHeight === -1 || rightHeight === -1 || leftHeight !== rightHeight) {
+      return -1;
+    } else {
+      return leftHeight + addCurrNode;
     }
   };
 
   const isValidRedBlackTree = (root) => {
-    /* Call with (current node, last node, minimum val curr can have for it to be a valid tree, maximum val, black height) */
+    const nodeCount = nodes.length - nodes.filter((x) => x === null).length;
+
+    /* Call with (current node, last node)
+     *
+     * Will construct tree for algorithm usage and make sure the structure is a valid tree
+     * (has at most two children*/
     recursivelyCheckAndBuildTree(root, null);
     if (
       verifyState.exceedsMaxEdgeCount ||
@@ -469,13 +668,41 @@ export default function Home() {
       setVerifyMessage("This is not a valid tree");
       return false;
     }
-    return true;
 
-    /** Still need to check black height and if BST property works from this point */
+    /* Call with tree[0], which is garaunteed to be root node,
+     *  checks red properties (no red node with red children), checks
+     *  BST property fully
+     *
+     * This also will link the tree, giving each tree node pointers to their parents, and children
+     *  */
+    if (
+      !checkIsTreeBSTAndRed(
+        tree[0],
+        Number.MIN_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER
+      )
+    ) {
+      setVerifyMessage("This is not a valid tree");
+      return false;
+    }
+
+    /* Checks if there are any disconnected nodes in our structure */
+    if (tree.length !== nodeCount) {
+      setVerifyMessage("This is not a valid tree");
+      return false;
+    }
+
+    /** Checks Black height property is respected */
+    if (checkTreeBlackHeight(tree[0]) === -1) {
+      setVerifyMessage("This is not a valid tree");
+      return false;
+    }
+    setVerifyMessage("This is a valid tree");
+    return true;
   };
 
   const resetVerifyState = () => {
-    setVerifyState({
+    verifyState = {
       numVisited: 0,
       redHasRedChildren: false,
       blackHeightGood: true,
@@ -483,14 +710,12 @@ export default function Home() {
       hasCycle: false,
       badOrder: false,
       sameLabel: false,
-    });
+    };
   };
 
   const verifyStruct = () => {
     resetVerifyState();
-    treeChangeDispatch({
-      type: "reset",
-    });
+    tree = [];
 
     const nodeCount = nodes.length - nodes.filter((x) => x === null).length;
 
@@ -573,6 +798,8 @@ export default function Home() {
           onClick={() => {
             setMouseState("C");
             setSelected("");
+            console.log(edges);
+            console.log(nodes);
           }}
         >
           Color
@@ -591,6 +818,24 @@ export default function Home() {
           }}
         >
           Label
+        </button>
+        <button
+          className="p-5 bg-white w-full"
+          onClick={() => {
+            setMouseState("D");
+            setSelected("");
+          }}
+        >
+          Delete
+        </button>
+        <button
+          className="p-5 bg-white w-full"
+          onClick={() => {
+            setMouseState("R");
+            setSelected("");
+          }}
+        >
+          Root
         </button>
       </div>
       <div className={`absolute top-0 left-0 z-0 overflow-visible`}>
@@ -612,6 +857,9 @@ export default function Home() {
         </svg>
       </div>
       {nodes.map((a) => {
+        if (!a) {
+          return;
+        }
         return (
           <Node
             root={a.id === rootId}
