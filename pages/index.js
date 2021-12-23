@@ -118,23 +118,27 @@ export default function Home() {
   const [rootId, setRootId] = useState(0);
   const [verifyMessage, setVerifyMessage] = useState("");
   const [isValid, setIsValid] = useState(false);
+  const [treeState, setTreeState] = useState([]);
 
+  let treeArrRoot = 0;
   let tree = [
     /*
     {
-      label: "",
-      parent: num,
-      parentId: num,
-      left: num,
-      leftId: num,
-      right: num,
-      rightId: num,
-      id: num,
-      isBlack: bool,
+      nodeId: num,  //position of this node in nodes DOM arr
+      label: num,   //int label of this node
+      parent: num,  //int label of parent node === undefined if root
+      parentId: num, //int index of parent node in tree arr === -1 if root
+      left: num,    //int label of left node === undefined if no child
+      leftId: num,  //int index of left node in tree arr === undefined if no child
+      right: num,   //int label of right node === undefined if no child
+      rightId: num, //int index of right node in tree arr === undefined if no child
+      id: num,      //int index of this node in tree arr
+      isBlack: bool, //Whether or not this node is black
     }
      */
   ];
   let edgeAnimations = [];
+  let actions = [];
 
   let verifyState = {
     numVisited: 0,
@@ -863,11 +867,6 @@ export default function Home() {
       return;
     }
 
-    /* TODO: Use a find-union data structure to check if the tree is fully connected
-     *
-     * Use an array to store ids of edges, keep adding to it until it cannot be added to, check
-     * if length = length of nodes */
-
     let rootNode;
     /** Making sure root node is valid */
     if (rootId >= 0 && nodes[rootId] && nodes[rootId].isBlack) {
@@ -904,6 +903,7 @@ export default function Home() {
       setVerifyMessage("Is valid BST");
       spaceOutTree();
       setIsValid(true);
+      setTreeState(tree);
     }
   };
 
@@ -1014,22 +1014,6 @@ export default function Home() {
           ...from,
         },
       };
-      /*
-      if (edges[renderedNodeObj.edges[i]].start === node.nodeId) {
-        edge.attributes.x1.nodeValue = positionX + "px";
-        edge.attributes.x1.value = positionX + "px";
-        edge.attributes.x1.textContent = positionX + "px";
-        edge.attributes.y1.nodeValue = positionY + "px";
-        edge.attributes.y1.value = positionY + "px";
-        edge.attributes.y1.textContent = positionY + "px";
-      } else {
-        edge.attributes.x2.nodeValue = positionX + "px";
-        edge.attributes.x2.value = positionX + "px";
-        edge.attributes.x2.textContent = positionX + "px";
-        edge.attributes.y2.nodeValue = positionY + "px";
-        edge.attributes.y2.value = positionY + "px";
-        edge.attributes.y2.textContent = positionY + "px";
-      }*/
     }
 
     currRef.current.style.transition = "all 0.5s linear";
@@ -1051,6 +1035,248 @@ export default function Home() {
       childrenOffsetY
     );
   };
+
+  /** Will alter the actions array used to animate this process
+   *
+   * Idea: Change the tree array to handle the insert, altering the actions array
+   *       along the way, then go through the actions array, updating the DOM state
+   *       objects to animate stuff
+   */
+  const handleInsertion = (insertLabel) => {
+    actions = [];
+    tree = treeState;
+    console.log(tree);
+
+    /* Call with (labelToInsert, tree root, parent node) */
+    insertIntoTreeArr(insertLabel, tree[0], undefined);
+    setTreeState(tree);
+    console.log(actions);
+  };
+
+  const insertIntoTreeArr = (label, currNode, parNode) => {
+    /* Halting case */
+    if (!currNode) {
+      /* Inserting root node case */
+      if (!parNode) {
+        tree.push({
+          nodeId: currInd,
+          label: label,
+          parent: undefined,
+          parentId: -1,
+          left: undefined,
+          leftId: undefined,
+          right: undefined,
+          rightId: undefined,
+          id: tree.length,
+          isBlack: true,
+        });
+        actions.push("root");
+        return;
+      }
+      tree.push({
+        nodeId: currInd,
+        label: label,
+        parent: parNode.label,
+        parentId: parNode.id,
+        left: undefined,
+        leftId: undefined,
+        right: undefined,
+        rightId: undefined,
+        id: tree.length,
+        isBlack: false,
+      });
+      if (label < parNode.label) {
+        tree[parNode.id].left = label;
+        tree[parNode.id].leftId = tree.length - 1;
+      } else {
+        tree[parNode.id].right = label;
+        tree[parNode.id].rightId = tree.length - 1;
+      }
+      actions.push("place");
+      if (!parNode.isBlack) {
+        /* Know grandparent must exist if parent is red, as our algorithm cannot
+         * set a node to be red if that node is the root */
+        const grandparNode = tree[parNode.parentId];
+        const changeRoot = grandparNode.parentId === -1;
+        const updatedParNode = tree[parNode.id];
+        const updatedCurrNode = tree[tree.length - 1];
+        let avlKink = false;
+
+        /* Checks if we need two AVL rotations to remove a kink (case 1) */
+        if (
+          grandparNode.leftId === updatedParNode.id &&
+          updatedParNode.rightId === updatedCurrNode.id
+        ) {
+          avlKink = true;
+          AVLRotateTree(tree[updatedParNode.id], false);
+          actions.push(`rotateparleft`);
+        } else if (
+          /* Checks if we need two AVL rotations to remove a kink (case 2) */
+          grandparNode.rightId === updatedParNode.id &&
+          updatedParNode.leftId === updatedCurrNode.id
+        ) {
+          avlKink = true;
+          AVLRotateTree(tree[updatedParNode.id], true);
+          actions.push(`rotateparright`);
+        }
+
+        const needToRotateRight = grandparNode.leftId === updatedParNode.id;
+        AVLRotateTree(tree[grandparNode.id], needToRotateRight);
+        tree[grandparNode.id].isBlack = false;
+        if (avlKink) {
+          tree[updatedCurrNode.id].isBlack = true;
+          if (changeRoot) {
+            treeArrRoot = updatedCurrNode.id;
+          }
+        } else {
+          tree[updatedParNode.id].isBlack = true;
+          if (changeRoot) {
+            treeArrRoot = updatedParNode.id;
+          }
+        }
+        actions.push(`rotategrandpar${needToRotateRight ? "right" : "left"}`);
+      }
+      return;
+    }
+
+    /* Fail case */
+    if (currNode.label === label) {
+      actions.push("fail");
+      return;
+    }
+
+    console.log(currNode.leftId);
+    /* If currNode is black and has red children, recolor */
+    if (currNode.isBlack) {
+      if (
+        currNode.leftId &&
+        currNode.rightId &&
+        currNode.leftId > -1 &&
+        currNode.rightId > -1 &&
+        !tree[currNode.leftId].isBlack &&
+        !tree[currNode.rightId].isBlack
+      ) {
+        actions.push("recolor");
+        /* Only recolor currNode to red if it is not root, if it is root is must be black */
+        if (currNode.parent) {
+          tree[currNode.id].isBlack = false;
+        } else {
+          actions.push("blackroot");
+        }
+        tree[currNode.leftId].isBlack = true;
+        tree[currNode.rightId].isBlack = true;
+
+        /* Make sure we now don't have a red node with red parent, if we do we need
+         * to AVL rotate */
+        if (parNode && !parNode.isBlack) {
+          /* Know grandparent must exist if parent is red, as our algorithm cannot
+           * set a node to be red if that node is the root */
+          const grandparNode = tree[parNode.parentId];
+          const changeRoot = grandparNode.parentId === -1;
+          let avlKink = false;
+
+          /* Checks if we need two AVL rotations to remove a kink (case 1) */
+          if (
+            grandparNode.leftId === parNode.id &&
+            parNode.rightId === currNode.id
+          ) {
+            avlKink = true;
+            AVLRotateTree(tree[parNode.id], false);
+            actions.push(`rotateparleft`);
+          } else if (
+            /* Checks if we need two AVL rotations to remove a kink (case 2) */
+            grandparNode.rightId === parNode.id &&
+            parNode.leftId === currNode.id
+          ) {
+            avlKink = true;
+            AVLRotateTree(tree[parNode.id], true);
+            actions.push(`rotateparright`);
+          }
+
+          const needToRotateRight = grandparNode.leftId === parNode.id;
+          AVLRotateTree(tree[grandparNode.id], needToRotateRight);
+          tree[grandparNode.id].isBlack = false;
+          if (avlKink) {
+            tree[currNode.id].isBlack = true;
+            if (changeRoot) {
+              treeArrRoot = currNode.id;
+            }
+          } else {
+            tree[parNode.id].isBlack = true;
+            if (changeRoot) {
+              treeArrRoot = parNode.id;
+            }
+          }
+          actions.push(`rotategrandpar${needToRotateRight ? "right" : "left"}`);
+        }
+      }
+    }
+
+    if (label > currNode.label) {
+      actions.push("right");
+      insertIntoTreeArr(
+        label,
+        tree[tree[currNode.id].rightId],
+        tree[currNode.id]
+      );
+    } else {
+      actions.push("left");
+      insertIntoTreeArr(
+        label,
+        tree[tree[currNode.id].leftId],
+        tree[currNode.id]
+      );
+    }
+  };
+
+  const AVLRotateTree = (node, right) => {
+    let parentLabel = node.parent;
+    let parentId = node.parentId;
+    const newRoot = parentId === -1;
+    let nodeToConnectToOldPar = undefined;
+    if (right) {
+      nodeToConnectToOldPar = tree[node.leftId];
+      const newRightChild = node;
+      const newRightLeftChild = tree[nodeToConnectToOldPar.rightId];
+      tree[nodeToConnectToOldPar.id].parent = parentLabel;
+      tree[nodeToConnectToOldPar.id].parentId = parentId;
+      tree[nodeToConnectToOldPar.id].right = tree[newRightChild.id].label;
+      tree[nodeToConnectToOldPar.id].rightId = newRightChild.id;
+      tree[newRightChild.id].parent = tree[nodeToConnectToOldPar.id].label;
+      tree[newRightChild.id].parentId = nodeToConnectToOldPar.id;
+      tree[newRightChild.id].left = tree[newRightLeftChild.id].label;
+      tree[newRightChild.id].leftId = newRightLeftChild.id;
+      tree[newRightLeftChild.id].parent = tree[newRightChild.id].label;
+      tree[newRightLeftChild.id].parentId = newRightChild.id;
+    } else {
+      nodeToConnectToOldPar = tree[node.rightId];
+      const newLeftChild = node;
+      const newLeftRightChild = tree[nodeToConnectToOldPar.leftId];
+      tree[nodeToConnectToOldPar.id].parent = parentLabel;
+      tree[nodeToConnectToOldPar.id].parentId = parentId;
+      tree[nodeToConnectToOldPar.id].left = tree[newLeftChild.id].label;
+      tree[nodeToConnectToOldPar.id].leftId = newLeftChild.id;
+      tree[newLeftChild.id].parent = tree[nodeToConnectToOldPar.id].label;
+      tree[newLeftChild.id].parentId = nodeToConnectToOldPar.id;
+      tree[newLeftChild.id].right = tree[newLeftRightChild.id].label;
+      tree[newLeftChild.id].rightId = newLeftRightChild.id;
+      tree[newLeftRightChild.id].parent = tree[newLeftChild.id].label;
+      tree[newLeftRightChild.id].parentId = newLeftChild.id;
+    }
+    if (newRoot) {
+      treeArrRoot = nodeToConnectToOldPar.id;
+      return;
+    }
+    if (tree[parentId].leftId === node.id) {
+      tree[parentId].leftId = nodeToConnectToOldPar.id;
+      tree[parentId].left = nodeToConnectToOldPar.label;
+    } else {
+      tree[parentId].rightId = nodeToConnectToOldPar.id;
+      tree[parentId].right = nodeToConnectToOldPar.label;
+    }
+  };
+
+  const AVLRotateDOM = () => {};
 
   return (
     <div id="canvas" className="relative min-w-full min-h-screen bg-background">
@@ -1081,8 +1307,7 @@ export default function Home() {
           onClick={() => {
             setMouseState("C");
             setSelected("");
-            console.log(edges);
-            console.log(nodes);
+            console.log(treeState);
           }}
         >
           Color
@@ -1127,7 +1352,6 @@ export default function Home() {
             if (!a) {
               return;
             }
-            console.log(window.performance);
             const beginTime =
               Date.now() - window.performance.timing.domComplete;
             return (
