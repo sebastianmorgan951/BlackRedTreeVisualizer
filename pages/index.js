@@ -1,6 +1,8 @@
 import { createRef, useEffect, useReducer, useRef, useState } from "react";
 import Edge from "../components/edge";
 import Node from "../components/node";
+import styles from "../styles/home.module.css";
+import Navbar from "../components/nav";
 
 /* TODO: When a node has a self edge, if we move that node, self edge does not update accordingly, why? */
 
@@ -1280,6 +1282,7 @@ export default function Home() {
 
   return (
     <div id="canvas" className="relative min-w-full min-h-screen bg-background">
+      <Navbar />
       <div className="relative inset-0 m-auto">{verifyMessage}</div>
       <div className="sticky top-2 z-20 left-2 w-min flex flex-col justify-evenly items-center bg-black">
         <button
