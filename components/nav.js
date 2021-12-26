@@ -103,7 +103,7 @@ const dropdownContent = [
   },
 ];
 
-const Navbar = () => {
+const Navbar = (props) => {
   const [open, setOpen] = useState(-1);
 
   const NavItem = (props) => {
@@ -113,8 +113,8 @@ const Navbar = () => {
       const toMoveTo = document.getElementById(`navitem${ind}`);
       const dropdown = document.getElementById(`dropdownwindow`);
       const position = toMoveTo.getBoundingClientRect();
-      console.log(window);
-      dropdown.style.right = `${window.innerWidth - position.right + 5}px`;
+      dropdown.style.left = `${position.width + position.left + 2}px`;
+      dropdown.style.top = `${position.top + 2}px`;
     };
 
     return (
@@ -148,25 +148,31 @@ const Navbar = () => {
         <div
           id="dropdownwindow"
           className={`${styles.dropdown} transition-all ${
-            open === -1 ? `w-16` : `p-2`
+            open === -1 ? `h-16` : `p-2`
           }`}
         >
-          <p className="text-xs font-bold transition-all">
+          <p className="text-xs font-bold transition-all whitespace-nowrap self-center">
             {dropdownContent[open]?.title}
           </p>
           {dropdownContent[open]?.options.map((option, i) => {
+            const onClickFunctionIndex = 0;
+            for (let i = open - 1; i > -1; i--) {
+              onClickFunctionIndex =
+                onClickFunctionIndex + dropdownContent[i].options.length;
+            }
             return (
               <a
                 href="#"
-                className={`${styles.dropdownitem} w-full p-1 flex flex-row items-center justify-start`}
+                className={`${styles.dropdownitem} p-1 flex flex-row items-center justify-start`}
                 key={`dropdownitem${i}`}
+                onClick={props.handleClickEvents[onClickFunctionIndex + i]}
               >
                 {dropdownContent[open]?.icons[i] && (
                   <span className={`${styles.iconbuttonsmall}`}>
                     {dropdownContent[open]?.icons[i]}
                   </span>
                 )}
-                <p className="text-sm">{option}</p>
+                <p className="text-sm whitespace-nowrap">{option}</p>
               </a>
             );
           })}

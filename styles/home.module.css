@@ -1,16 +1,15 @@
 .navbar {
-  min-height: 2vh;
-  height: 60px;
-  padding: 0 1rem;
-  border-bottom: 1px solid gray;
-  background: lightgray;
+  padding: 10px;
+  position: sticky;
+  z-index: 20;
 }
 
 .navbarnav {
   max-width: 100%;
   height: 100%;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  z-index: 20;
 }
 
 .navitem {
@@ -18,15 +17,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 20;
 }
 
 .iconbutton {
   width: 40px;
   height: 40px;
-  background-color: gray;
+  background-color: rgb(230, 230, 230);
   border-radius: 50%;
   padding: 5px;
-  margin: 2px;
+  margin: 5px 2px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -47,7 +47,7 @@
 }
 
 .iconbutton:hover {
-  filter: brightness(1.2);
+  filter: brightness(0.9);
 }
 
 .dropdownitem {
@@ -56,7 +56,7 @@
 }
 
 .dropdownitem:hover > .iconbuttonsmall {
-  filter: brightness(1.2);
+  filter: brightness(0.9);
 }
 
 .dropdownitem:hover {
@@ -67,10 +67,10 @@
   background-color: gray;
   border-radius: 5px;
   position: absolute;
-  top: 53px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   overflow: visible;
+  z-index: 20;
 }

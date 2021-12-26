@@ -1280,75 +1280,42 @@ export default function Home() {
 
   const AVLRotateDOM = () => {};
 
+  /* Set of functions to be sent to the navbar, ordered from left to right of nav,
+   * then top to bottom (so top left dropdown option is 0, bottom right dropdown option
+   * is the number of total dropdown options available minus 1) */
+  const navClickFunctions = [
+    () => handleAddNode(),
+    () => {
+      setMouseState("S");
+      setSelected("");
+    },
+    () => {
+      setMouseState("C");
+      setSelected("");
+    },
+    () => {
+      setMouseState("L");
+      setSelected("");
+    },
+    () => {
+      setMouseState("D");
+      setSelected("");
+    },
+    () => {
+      setMouseState("R");
+      setSelected("");
+    },
+    () => {
+      setMouseState("E");
+    },
+    () => verifyStruct(),
+    () => enlargeCanvas(),
+  ];
+
   return (
     <div id="canvas" className="relative min-w-full min-h-screen bg-background">
-      <Navbar />
+      <Navbar handleClickEvents={navClickFunctions} />
       <div className="relative inset-0 m-auto">{verifyMessage}</div>
-      <div className="sticky top-2 z-20 left-2 w-min flex flex-col justify-evenly items-center bg-black">
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("E");
-          }}
-        >
-          Edge
-        </button>
-        <button className="p-5 bg-white w-full" onClick={() => handleAddNode()}>
-          Node
-        </button>
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("S");
-            setSelected("");
-          }}
-        >
-          Select
-        </button>
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("C");
-            setSelected("");
-            console.log(treeState);
-          }}
-        >
-          Color
-        </button>
-        <button className="p-5 bg-white w-full" onClick={() => enlargeCanvas()}>
-          Canvas
-        </button>
-        <button className="p-5 bg-white w-full" onClick={() => verifyStruct()}>
-          Verify
-        </button>
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("L");
-            setSelected("");
-          }}
-        >
-          Label
-        </button>
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("D");
-            setSelected("");
-          }}
-        >
-          Delete
-        </button>
-        <button
-          className="p-5 bg-white w-full"
-          onClick={() => {
-            setMouseState("R");
-            setSelected("");
-          }}
-        >
-          Root
-        </button>
-      </div>
       <div className={`absolute top-0 left-0 z-0 overflow-visible`}>
         <svg overflow="visible" width="100%" height="100%">
           {edges.map((a) => {
