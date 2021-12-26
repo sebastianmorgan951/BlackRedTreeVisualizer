@@ -234,6 +234,9 @@ export default function Home() {
    * node.
    */
   const handleAddNode = () => {
+    /** TODO: Put new node in middle of screen
+     *
+     */
     nodeChangeDispatch({
       type: "add",
       ind: currInd,
@@ -287,6 +290,7 @@ export default function Home() {
         deleteNode(nodeIdNum);
         return;
       case "R":
+        console.log("Setting id homie");
         setRootId(nodeIdNum);
         return;
     }
