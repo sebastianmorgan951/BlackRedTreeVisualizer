@@ -93,8 +93,8 @@ const dropdownContent = [
   },
   {
     title: "Tree Operations",
-    options: ["Verify Tree"],
-    icons: [null],
+    options: ["Verify Tree", "Insert"],
+    icons: [null, null],
   },
   {
     title: "Canvas Options",

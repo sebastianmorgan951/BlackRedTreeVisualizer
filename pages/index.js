@@ -19,8 +19,9 @@ const nodeReducer = (state, action) => {
       updated.push({
         id: action.ind,
         ref: action.ref,
+        initialLabel: action.label,
         edges: [],
-        isBlack: true,
+        isBlack: action.black,
       });
       return updated;
     case "addEdge":
@@ -122,6 +123,7 @@ export default function Home() {
   const [isValid, setIsValid] = useState(false);
   const [treeState, setTreeState] = useState([]);
 
+  let treeStateSnapshots = [];
   let treeArrRoot = 0;
   let tree = [
     /*
@@ -139,8 +141,9 @@ export default function Home() {
     }
      */
   ];
-  let edgeAnimations = [];
   let actions = [];
+  let edgeAnimations = [];
+  let insertionHappening = false;
 
   let verifyState = {
     numVisited: 0,
@@ -153,7 +156,7 @@ export default function Home() {
   };
 
   const [nodeSize, setNodeSize] = useState(50);
-  const [animationSpeed, setAnimationSpeed] = useState("500ms");
+  const [animationSpeed, setAnimationSpeed] = useState(1000);
 
   const [label, labelChangeDispatch] = useReducer(labelReducer, [
     /* Contains strings corresponding to the id of node
@@ -189,6 +192,7 @@ export default function Home() {
     /*{
       id: 0,
       edges: [],
+      initialLabel: "Label",
       ref: {},
       isBlack: true,
     },*/
@@ -233,15 +237,24 @@ export default function Home() {
    * access it at any point and perform more complicated operations on the
    * node.
    */
-  const handleAddNode = () => {
+  const handleAddNode = (label = "Label", black = true) => {
     /** TODO: Put new node in middle of screen
      *
      */
     nodeChangeDispatch({
       type: "add",
       ind: currInd,
+      label: label,
+      black: black,
       ref: createRef(),
     });
+    if (label !== "Label") {
+      labelChangeDispatch({
+        type: "change",
+        ind: currInd,
+        label: label,
+      });
+    }
     setCurrInd(currInd + 1);
   };
 
@@ -313,9 +326,9 @@ export default function Home() {
    *
    * @param id, the ID of the node endpoint to be connected
    */
-  const edgeLinking = (id) => {
+  const edgeLinking = (id, startId = selected) => {
     const endNodeNum = parseInt(id.match(/\d+$/)[0]);
-    const startNodeNum = parseInt(selected.match(/\d+$/)[0]);
+    const startNodeNum = parseInt(startId.match(/\d+$/)[0]);
 
     if (endNodeNum === startNodeNum) {
       return;
@@ -551,7 +564,6 @@ export default function Home() {
     const currId = currNode.id;
     let parentId = -1;
     let parentLabel = undefined;
-
     /* Quit if any error states are true */
     if (
       verifyState.exceedsMaxEdgeCount ||
@@ -963,8 +975,7 @@ export default function Home() {
       edgeChangeDispatch({
         type: "removeAnims",
       });
-    }, 600);
-    console.log(edgeAnimations);
+    }, animationSpeed + 100);
   };
 
   const positionTree = (
@@ -1022,7 +1033,7 @@ export default function Home() {
       };
     }
 
-    currRef.current.style.transition = "all 0.5s linear";
+    currRef.current.style.transition = `all ${animationSpeed}ms linear`;
     currRef.current.style.top = `${positionY - nodeOffset}px`;
     currRef.current.style.left = `${positionX - nodeOffset}px`;
 
@@ -1042,6 +1053,90 @@ export default function Home() {
     );
   };
 
+  /** Call with node that the tomove node is at in the tree, so that if the node goes
+   * down, then treeId would then point to the parent
+   *
+   * @param toMoveNodeId, the number representing the key (index) of the current
+   *                      node being inserted into the tree, where the index/key
+   *                      is the position of this object within the "nodes"
+   *                      array that is mapped to the DOM
+   * @param currTree, the current tree object within the treeStateSnapshots array
+   *                  that is being used for the current action
+   * @param treeId, the index of the node that the toMoveNode was last checked
+   *                against within the "currTree" array, so if we are moving right
+   *                down the tree, treeId would point to the node which would be
+   *                the parent of that movement down the tree
+   * @param right, boolean, whether or not we are moving right or left down the tree
+   * @returns
+   */
+  const movePlacedNode = (toMoveNodeId, currTree, treeId, right) => {
+    const moveRef = nodes[toMoveNodeId].ref;
+    moveRef.current.style.transition = `all ${animationSpeed}ms linear`;
+    const leftLabel = currTree[treeId].left;
+    const rightLabel = currTree[treeId].right;
+    console.log(leftLabel);
+    console.log(nodes[toMoveNodeId].initialLabel);
+
+    if (
+      !right &&
+      leftLabel &&
+      `${leftLabel}` !== nodes[toMoveNodeId].initialLabel
+    ) {
+      console.log("Here");
+      const moveToPosition =
+        nodes[
+          currTree[currTree[treeId].leftId].nodeId
+        ].ref.current.getBoundingClientRect();
+      moveRef.current.style.top = `${moveToPosition.top - nodeSize}px`;
+      moveRef.current.style.left = `${moveToPosition.left - nodeSize}px`;
+      return;
+    }
+    if (
+      right &&
+      rightLabel &&
+      `${rightLabel}` !== nodes[toMoveNodeId].initialLabel
+    ) {
+      const moveToPosition =
+        nodes[
+          currTree[currTree[treeId].rightId].nodeId
+        ].ref.current.getBoundingClientRect();
+      moveRef.current.style.top = `${moveToPosition.top - nodeSize}px`;
+      moveRef.current.style.left = `${moveToPosition.left + nodeSize}px`;
+      return;
+    }
+    /* Get space between parent and grandparent node to find how our tree structure
+     * would place the inserted node
+     *
+     * Know a parent node must exist, as a left/right operation can only be called
+     * if we move down from a node
+     *
+     * Do NOT know if a grandparent node exists, if it doesn't we just move
+     * nodeSize*2 to the right/left and top of the parent */
+    const treeParent = currTree[treeId];
+    const parentPosition =
+      nodes[treeParent.nodeId].ref.current.getBoundingClientRect();
+    const leftOrRightFactor = right ? 1 : -1;
+    if (currTree[treeParent.id].parent) {
+      console.log("placing");
+      const treeGrandparent = currTree[currTree[treeParent.id].parentId];
+      const grandparentPosition =
+        nodes[treeGrandparent.nodeId].ref.current.getBoundingClientRect();
+      moveRef.current.style.top = `${
+        2 * parentPosition.top - grandparentPosition.top
+      }px`;
+      moveRef.current.style.left = `${
+        parentPosition.left +
+        leftOrRightFactor *
+          Math.abs((grandparentPosition.left - parentPosition.left) / 2)
+      }px`;
+      return;
+    }
+    moveRef.current.style.top = `${parentPosition.top + 1.5 * nodeSize}px`;
+    moveRef.current.style.left = `${
+      parentPosition.left + leftOrRightFactor * 1.5 * nodeSize
+    }px`;
+  };
+
   /** Will alter the actions array used to animate this process
    *
    * Idea: Change the tree array to handle the insert, altering the actions array
@@ -1049,17 +1144,32 @@ export default function Home() {
    *       objects to animate stuff
    */
   const handleInsertion = (insertLabel) => {
+    insertionHappening = true;
+    treeStateSnapshots = [];
     actions = [];
     tree = treeState;
-    console.log(tree);
+    actions.push("start");
+    treeStateSnapshots.push(tree);
+    insertIntoTreeArr(insertLabel, tree[0], undefined, tree);
+    handleAddNode(`${insertLabel}`, false);
 
-    /* Call with (labelToInsert, tree root, parent node) */
-    insertIntoTreeArr(insertLabel, tree[0], undefined);
-    setTreeState(tree);
-    console.log(actions);
+    /* TODO:
+     * ADD A NEW THING TO A NODE - FOR ANIMATION, where once a node is mounted, an operation is executed,
+     * also need to see what's going on with edges
+     *
+     * Temporary solution, need to find a way to see when insertion has happened*/
+    setTimeout(() => {
+      nodes[
+        nodes.length - 1
+      ].ref.current.style.transition = `all ${animationSpeed}ms linear`;
+      insertIntoDom(0, 0, actions);
+      //TODO: Why isn't verifystruct working at this point?
+      verifyStruct();
+    }, animationSpeed);
+    //Call insertIntoDOM
   };
 
-  const insertIntoTreeArr = (label, currNode, parNode) => {
+  const insertIntoTreeArr = (label, currNode, parNode, tree) => {
     /* Halting case */
     if (!currNode) {
       /* Inserting root node case */
@@ -1077,6 +1187,7 @@ export default function Home() {
           isBlack: true,
         });
         actions.push("root");
+        treeStateSnapshots.push(tree);
         return;
       }
       tree.push({
@@ -1099,6 +1210,7 @@ export default function Home() {
         tree[parNode.id].rightId = tree.length - 1;
       }
       actions.push("place");
+      treeStateSnapshots.push(tree);
       if (!parNode.isBlack) {
         /* Know grandparent must exist if parent is red, as our algorithm cannot
          * set a node to be red if that node is the root */
@@ -1116,6 +1228,7 @@ export default function Home() {
           avlKink = true;
           AVLRotateTree(tree[updatedParNode.id], false);
           actions.push(`rotateparleft`);
+          treeStateSnapshots.push(tree);
         } else if (
           /* Checks if we need two AVL rotations to remove a kink (case 2) */
           grandparNode.rightId === updatedParNode.id &&
@@ -1124,6 +1237,7 @@ export default function Home() {
           avlKink = true;
           AVLRotateTree(tree[updatedParNode.id], true);
           actions.push(`rotateparright`);
+          treeStateSnapshots.push(tree);
         }
 
         const needToRotateRight = grandparNode.leftId === updatedParNode.id;
@@ -1141,6 +1255,7 @@ export default function Home() {
           }
         }
         actions.push(`rotategrandpar${needToRotateRight ? "right" : "left"}`);
+        treeStateSnapshots.push(tree);
       }
       return;
     }
@@ -1148,6 +1263,7 @@ export default function Home() {
     /* Fail case */
     if (currNode.label === label) {
       actions.push("fail");
+      treeStateSnapshots.push(tree);
       return;
     }
 
@@ -1163,11 +1279,13 @@ export default function Home() {
         !tree[currNode.rightId].isBlack
       ) {
         actions.push("recolor");
+        treeStateSnapshots.push(tree);
         /* Only recolor currNode to red if it is not root, if it is root is must be black */
         if (currNode.parent) {
           tree[currNode.id].isBlack = false;
         } else {
           actions.push("blackroot");
+          treeStateSnapshots.push(tree);
         }
         tree[currNode.leftId].isBlack = true;
         tree[currNode.rightId].isBlack = true;
@@ -1189,6 +1307,7 @@ export default function Home() {
             avlKink = true;
             AVLRotateTree(tree[parNode.id], false);
             actions.push(`rotateparleft`);
+            treeStateSnapshots.push(tree);
           } else if (
             /* Checks if we need two AVL rotations to remove a kink (case 2) */
             grandparNode.rightId === parNode.id &&
@@ -1197,6 +1316,7 @@ export default function Home() {
             avlKink = true;
             AVLRotateTree(tree[parNode.id], true);
             actions.push(`rotateparright`);
+            treeStateSnapshots.push(tree);
           }
 
           const needToRotateRight = grandparNode.leftId === parNode.id;
@@ -1214,23 +1334,28 @@ export default function Home() {
             }
           }
           actions.push(`rotategrandpar${needToRotateRight ? "right" : "left"}`);
+          treeStateSnapshots.push(tree);
         }
       }
     }
 
     if (label > currNode.label) {
       actions.push("right");
+      treeStateSnapshots.push(tree);
       insertIntoTreeArr(
         label,
         tree[tree[currNode.id].rightId],
-        tree[currNode.id]
+        tree[currNode.id],
+        tree
       );
     } else {
       actions.push("left");
+      treeStateSnapshots.push(tree);
       insertIntoTreeArr(
         label,
         tree[tree[currNode.id].leftId],
-        tree[currNode.id]
+        tree[currNode.id],
+        tree
       );
     }
   };
@@ -1238,7 +1363,7 @@ export default function Home() {
   const AVLRotateTree = (node, right) => {
     let parentLabel = node.parent;
     let parentId = node.parentId;
-    const newRoot = parentId === -1;
+    const newRoot = parentId === -1 || parentId === undefined;
     let nodeToConnectToOldPar = undefined;
     if (right) {
       nodeToConnectToOldPar = tree[node.leftId];
@@ -1282,38 +1407,146 @@ export default function Home() {
     }
   };
 
+  /**
+   * Idea: Should create an array of trees for each action
+   *
+   * @param i, the index of instruction from "actions" array we are animating
+   * @param currTreeId the current index of the tree being compared against/used
+   * @param parTreeId the parent index of the tree being used
+   * @returns
+   */
+  const insertIntoDom = (i, currTreeId, actions) => {
+    console.log(actions[i]);
+    let delayToNextAnim = 0;
+    let nextTreeId = currTreeId;
+    const toMove = nodes[nodes.length - 1];
+    toMove.ref.current.style.transition = `all ${animationSpeed}ms linear`;
+    if (i >= actions.length) {
+      return;
+    }
+    const currTree = treeStateSnapshots[i];
+    switch (actions[i]) {
+      case "left":
+        nextTreeId = currTree[currTreeId].leftId;
+        movePlacedNode(nodes.length - 1, currTree, currTreeId, false);
+        delayToNextAnim = 2 * animationSpeed;
+        break;
+      case "right":
+        nextTreeId = currTree[currTreeId].rightId;
+        movePlacedNode(nodes.length - 1, currTree, currTreeId, true);
+        delayToNextAnim = 2 * animationSpeed;
+        break;
+      case "recolor":
+        const parNode = currTree[currTreeId].nodeId;
+        const leftChildNode = currTree[currTree[currTreeId].leftId].nodeId;
+        const rightChildNode = currTree[currTree[currTreeId].rightId].nodeId;
+        delayToNextAnim = 2 * animationSpeed;
+        nodeChangeDispatch({
+          type: "changeColor",
+          ind: parNode,
+        });
+        nodeChangeDispatch({
+          type: "changeColor",
+          ind: leftChildNode,
+        });
+        nodeChangeDispatch({
+          type: "changeColor",
+          ind: rightChildNode,
+        });
+        break;
+      case "blackroot":
+        delayToNextAnim = 2 * animationSpeed;
+        nodeChangeDispatch({
+          type: "changeColor",
+          ind: currTree[currTreeId].nodeId,
+        });
+        break;
+      case "root":
+        delayToNextAnim = 2 * animationSpeed;
+        toMove.ref.current.style.left = `${
+          window.scrollX + window.innerWidth / 2
+        }px`;
+        toMove.ref.current.style.top = `${
+          window.scrollY + window.innerHeight / 2
+        }px`;
+        break;
+      case "start":
+        delayToNextAnim = 2 * animationSpeed;
+        if (typeof nodes[rootId] === "undefined") {
+          toMove.ref.current.style.left = `${
+            window.scrollX + window.innerWidth / 2 + nodeSize
+          }px`;
+          toMove.ref.current.style.top = `${
+            window.scrollY + window.innerHeight / 2 - nodeSize
+          }px`;
+          break;
+        }
+        const startNodePos = nodes[rootId].ref.current.getBoundingClientRect();
+        toMove.ref.current.style.left = `${startNodePos.left + nodeSize}px`;
+        toMove.ref.current.style.top = `${startNodePos.top - nodeSize}px`;
+        break;
+      case "place":
+        delayToNextAnim = 2 * animationSpeed;
+        const parId = currTree[currTree[currTree.length - 1].parentId].nodeId;
+        edgeLinking(`${parId}`, `${nodes.length - 1}`);
+    }
+    setTimeout(
+      () => insertIntoDom(i + 1, nextTreeId, actions),
+      delayToNextAnim
+    );
+  };
+
   const AVLRotateDOM = () => {};
 
   /* Set of functions to be sent to the navbar, ordered from left to right of nav,
    * then top to bottom (so top left dropdown option is 0, bottom right dropdown option
    * is the number of total dropdown options available minus 1) */
   const navClickFunctions = [
-    () => handleAddNode(),
     () => {
+      setIsValid(false);
+      handleAddNode();
+    },
+    () => {
+      setIsValid(false);
       setMouseState("S");
       setSelected("");
     },
     () => {
+      setIsValid(false);
       setMouseState("C");
       setSelected("");
     },
     () => {
+      setIsValid(false);
       setMouseState("L");
       setSelected("");
     },
     () => {
+      setIsValid(false);
       setMouseState("D");
       setSelected("");
     },
     () => {
+      setIsValid(false);
       setMouseState("R");
       setSelected("");
     },
     () => {
+      setIsValid(false);
       setMouseState("E");
     },
     () => verifyStruct(),
-    () => enlargeCanvas(),
+    () => {
+      if (!isValid) {
+        verifyStruct();
+        setTimeout(() => handleInsertion(20), 1.1 * animationSpeed);
+      } else {
+        handleInsertion(20);
+      }
+    },
+    () => {
+      enlargeCanvas();
+    },
   ];
 
   return (
@@ -1330,7 +1563,7 @@ export default function Home() {
               Date.now() - window.performance.timing.domComplete;
             return (
               <Edge
-                dur={animationSpeed}
+                dur={`${animationSpeed}ms`}
                 to={a.to}
                 id={`edge${a.id}`}
                 key={`edge${a.id}`}
@@ -1364,6 +1597,7 @@ export default function Home() {
               contentEditable={mouseState === "L" ? true : false}
               suppressContentEditableWarning={true}
               className="text-xs absolute text-white"
+              id={`node${a.id}label`}
               onInput={(e) => {
                 labelChangeDispatch({
                   type: "change",
@@ -1372,7 +1606,7 @@ export default function Home() {
                 });
               }}
             >
-              Label
+              {a.initialLabel}
             </p>
           </Node>
         );
